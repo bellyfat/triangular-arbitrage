@@ -18,6 +18,9 @@ OPEN_ORDERS_URL = 'https://kitchen-3.kucoin.com/v1/{}/open/orders?limit=1'
 # 0.1% per operation
 TRADING_FEE = 0.001
 
+BUY_TEMPLATE = 'Buy  {} @ {} {} (vol: {} {})'
+SELL_TEMPLATE = 'Sell {} @ {} {} (vol: {} {})'
+
 
 class ArbitrageBot():
     def __init__(self):
@@ -64,7 +67,7 @@ class ArbitrageBot():
             [{'SELL': [[68.089535, 8.371073, 569.98246803]],
             'BUY': [[68.0, 0.186491, 12.681388]]}, {'SELL': [[0.00789916,
             0.674902, 0.00533116]], 'BUY': [[0.00787229, 1.0, 0.00787229]]},
-            {'SELL': [[8684.996557, 0.06735591, 584.98584644]], 'BUY': 
+            {'SELL': [[8684.996557, 0.06735591, 584.98584644]], 'BUY':
             [[8625.612438, 0.3, 2587.6837314]]}]
         '''
         # Data must be a list of 3 elements representing the 3 markets.
@@ -183,30 +186,31 @@ class ArbitrageBot():
                                                                other_coin_pair,
                                                                coin_pair))
                         print('Max vol %s %s' % (max_vol_to_buy, coin))
-                        print('Arbitrage oportunity! {:.4f}%'.format(percentage))
-                        print('Buy  {} @ {} {} (vol: {} {})'.format(coin,
-                                                                 buy,
-                                                                 coin_pair,
-                                                                 market1_volume,
-                                                                 coin
-                                                                 ))
-                        print('Sell {} @ {} {} (vol: {} {})'.format(coin,
-                                                               sell_other,
-                                                               other_coin_pair,
-                                                               market2_volume,
-                                                               coin))
+                        print('Arbitrage oportunity! {:.4f}%'.format(
+                                                                percentage))
+                        print(BUY_TEMPLATE.format(coin,
+                                                  buy,
+                                                  coin_pair,
+                                                  market1_volume,
+                                                  coin
+                                                  ))
+                        print(SELL_TEMPLATE.format(coin,
+                                                   sell_other,
+                                                   other_coin_pair,
+                                                   market2_volume,
+                                                   coin))
                         if ratio_reversed:
-                            print('Buy {} @ {} {} (vol: {} {})'.format(coin_pair,
-                                                                ratio[0],
-                                                                other_coin_pair,
-                                                                market3_volume,
-                                                                coin_pair))
+                            print(BUY_TEMPLATE.format(coin_pair,
+                                                      ratio[0],
+                                                      other_coin_pair,
+                                                      market3_volume,
+                                                      coin_pair))
                         else:
-                            print('Sell {} @ {} {} (vol: {} {})'.format(other_coin_pair,
-                                                           ratio[1],
-                                                           coin_pair,
-                                                           market3_volume,
-                                                           other_coin_pair))
+                            print(SELL_TEMPLATE.format(other_coin_pair,
+                                                       ratio[1],
+                                                       coin_pair,
+                                                       market3_volume,
+                                                       other_coin_pair))
 
                         print('----------------------------')
 
