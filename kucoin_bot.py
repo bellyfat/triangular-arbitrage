@@ -178,8 +178,14 @@ class ArbitrageBot():
                         percentage = cmp_val / buy
 
                         # TODO: Check market 3
-                        max_vol_to_buy = min(market1_volume,
-                                             market2_volume)
+                        if ratio_reversed:
+                            max_vol_to_buy = min(market1_volume,
+                                                 market2_volume,
+                                                 market3_volume / buy)
+                        else:
+                            max_vol_to_buy = min(market1_volume,
+                                                 market2_volume,
+                                                 market3_volume / sell_other)
 
                         print('Arbitrage: %s -> %s -> %s -> %s' % (coin_pair,
                                                                coin,
