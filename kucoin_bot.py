@@ -3,6 +3,7 @@ import aiohttp
 import requests
 import json
 import time
+import yaml
 
 # Get all the symbols, with information like buy and sell prices, fee,
 # volume...
@@ -23,10 +24,12 @@ SELL_TEMPLATE = 'Sell {} @ {} {} (vol: {} {})'
 
 
 class ArbitrageBot():
-    def __init__(self):
-        self.loop = asyncio.get_event_loop()
-        self.session = aiohttp.ClientSession(loop=self.loop)
+    def __init__(self, config_file='config.yaml'):
+        self.loop = asyncio.new_event_loop()
         self._symbols = {}
+
+        with open(config_file, 'r') as f:
+            self.config = yaml.load(f)
 
         ts = time.perf_counter()
         # Get the trade precision of all coins, sync http get may be slow but
@@ -47,15 +50,27 @@ class ArbitrageBot():
     def __del__(self):
         self.loop.close()
 
-    async def _get_url_async(self, url):
-        async with self.session.get(url, timeout=10) as response:
+    def min_percentage_to_trade(self):
+        return self.config['bot']['min_percentage']
+
+    def min_vol_to_trade(self, coin):
+        vol_config = self.config['bot']['min_volume']
+        if coin in vol_config.keys():
+            return vol_config[coin]
+        else:
+            return None
+
+    async def _get_url_async(self, url, session):
+        async with session.get(url, timeout=10) as response:
             assert response.status == 200
             return await response.json()
 
-    def _get_urls_async(self, url_list):
-        tasks = [self._get_url_async(url) for url in url_list]
+    async def _get_urls_async(self, urls, session):
         pages = []
-        pages = self.loop.run_until_complete(asyncio.gather(*tasks))
+        tasks = [self.loop.create_task(self._get_url_async(url, session))
+                 for url in urls]
+        for t in tasks:
+            pages.append(await t)
         return pages
 
     def _get_url_sync(self, url):
@@ -82,8 +97,9 @@ class ArbitrageBot():
                                         else sell_other / ratio[0]
         return buy, sell, buy_other, sell_other, cmp_val, (buy < cmp_val)
 
-    def _get_arbitrage_oportunities(self):
+    async def _get_arbitrage_oportunities(self):
         arbitrage_oportunities = []
+        session = aiohttp.ClientSession(loop=self.loop)
         for coin_pair, v in self._symbols.items():
             for coin, (buy, sell) in v.items():
                 # Iterate through all the markets
@@ -124,9 +140,9 @@ class ArbitrageBot():
                         # TODO: Buy/sell operations
                         # Buy coin_pair for coin, sell coin for other_coin_pair
                         # sell other_coin_pair for coin_pair
-                        arbitrage_oportunities.append([coin_pair,
-                                                       coin,
-                                                       other_coin_pair])
+                        # arbitrage_oportunities.append([coin_pair,
+                        #                                coin,
+                        #                                other_coin_pair])
 
                         market1 = coin + '-' + coin_pair
                         market2 = coin + '-' + other_coin_pair
@@ -140,11 +156,11 @@ class ArbitrageBot():
                         # Download the markets data asyncronously, it's
                         # usually x10 faster than syncronously :D
                         # Usually between 0.5 and 1.5s
-                        data = self._get_urls_async([
+                        data = await self._get_urls_async([
                                               OPEN_ORDERS_URL.format(market1),
                                               OPEN_ORDERS_URL.format(market2),
                                               OPEN_ORDERS_URL.format(market3)
-                                              ])
+                                              ], session)
                         t = time.perf_counter() - ts
                         print('Time downloading data async: {:.2f}s'.format(t))
 
@@ -177,7 +193,12 @@ class ArbitrageBot():
 
                         percentage = cmp_val / buy
 
-                        # TODO: Check market 3
+                        if percentage < self.min_percentage_to_trade():
+                            # TODO: Delete this
+                            print('DEBUG: Continue because of percentage ({:.8f})'.format(
+                                                                                    percentage))
+                            continue
+
                         if ratio_reversed:
                             max_vol_to_buy = min(market1_volume,
                                                  market2_volume,
@@ -186,6 +207,16 @@ class ArbitrageBot():
                             max_vol_to_buy = min(market1_volume,
                                                  market2_volume,
                                                  market3_volume / sell_other)
+
+                        # Convert the volume from coin to coin_pair, and check
+                        # if it's an acceptable value (check the config file)
+                        if ((max_vol_to_buy * buy)
+                                < self.min_vol_to_trade(coin_pair)):
+                            # TODO: Delete this
+                            print('DEBUG: Continue because of volume ({} {})'.format(
+                                                                       max_vol_to_buy * buy,
+                                                                       coin_pair))
+                            continue
 
                         print('Arbitrage: %s -> %s -> %s -> %s' % (coin_pair,
                                                                coin,
@@ -220,6 +251,7 @@ class ArbitrageBot():
 
                         print('----------------------------')
 
+        await session.close()
         return arbitrage_oportunities
 
     def _process_symbols(self, symbols):
@@ -266,7 +298,10 @@ class ArbitrageBot():
         self._process_symbols(sym)
         t = time.perf_counter() - tstart
         print('Time downloading the symbols page: {:.2f}s'.format(t))
-        self._get_arbitrage_oportunities()
+        coroutine = self._get_arbitrage_oportunities()
+        # XXX: This is really needed?
+        asyncio.set_event_loop(self.loop)
+        return self.loop.run_until_complete(coroutine)
 
 
 if __name__ == '__main__':

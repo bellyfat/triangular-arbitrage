@@ -1,0 +1,12 @@
+telegram:
+    on: True
+    api_key: FOO
+bot:
+    # Minimum percentage of benefits, without substracting fees
+    min_percentage: 1.006
+    # Minimum volume needed to perform the operation. Aprox 10$
+    min_volume:
+        NEO: 0.33
+        BTC: 0.0015
+        ETH: 0.02
+        KCS: 4.5
