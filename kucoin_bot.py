@@ -4,6 +4,11 @@ import requests
 import json
 import time
 import yaml
+import logging
+
+logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(message)s',
+                    datefmt='%d/%m/%Y %H:%M:%S',
+                    level=logging.DEBUG)
 
 # Get all the symbols, with information like buy and sell prices, fee,
 # volume...
@@ -45,7 +50,7 @@ class ArbitrageBot():
             trade_precision = coin['tradePrecision']
             self._trade_precision[coin_sym] = trade_precision
         t = time.perf_counter() - ts
-        print('Time downloading precision page: {:.2f}s'.format(t))
+        logging.info('Time downloading precision page: {:.2f}s'.format(t))
 
     def __del__(self):
         self.loop.close()
@@ -59,6 +64,9 @@ class ArbitrageBot():
             return vol_config[coin]
         else:
             return None
+
+    def active_coins(self):
+        return self.config['bot']['active_coins']
 
     async def _get_url_async(self, url, session):
         async with session.get(url, timeout=10) as response:
@@ -101,6 +109,10 @@ class ArbitrageBot():
         arbitrage_oportunities = []
         session = aiohttp.ClientSession(loop=self.loop)
         for coin_pair, v in self._symbols.items():
+            if coin_pair not in self.active_coins():
+                # We don't want to trade with this coin according to the
+                # configuration
+                continue
             for coin, (buy, sell) in v.items():
                 # Iterate through all the markets
 
@@ -140,9 +152,6 @@ class ArbitrageBot():
                         # TODO: Buy/sell operations
                         # Buy coin_pair for coin, sell coin for other_coin_pair
                         # sell other_coin_pair for coin_pair
-                        # arbitrage_oportunities.append([coin_pair,
-                        #                                coin,
-                        #                                other_coin_pair])
 
                         market1 = coin + '-' + coin_pair
                         market2 = coin + '-' + other_coin_pair
@@ -162,11 +171,16 @@ class ArbitrageBot():
                                               OPEN_ORDERS_URL.format(market3)
                                               ], session)
                         t = time.perf_counter() - ts
-                        print('Time downloading data async: {:.2f}s'.format(t))
+                        logging.debug('Time downloading data async: {:.2f}s'.format(t))
 
                         for d in data:
                             if not d['success']:
                                 # TODO: Logging
+                                logging.debug('Continue because the data for the markets'
+                                        ' {} -> {} -> {} can\'t returned an invalid'
+                                        ' response'.format(coin_pair,
+                                                           coin,
+                                                           other_coin_pair))
                                 continue
 
                         # Now data is a dict with two keys, SELL and BUY.
@@ -180,6 +194,11 @@ class ArbitrageBot():
                                                                 ratio_reversed)
                         # Check if arbitrage still exists
                         if not ok:
+                            logging.debug('Continue because arbitrage oportunity'
+                                          ' doesn\'t exist anymore for markets'
+                                          ' {} -> {} -> {}'.format(coin_pair,
+                                                                   coin,
+                                                                   other_coin_pair))
                             continue
 
                         # We have to look at the contrary operation to fill
@@ -195,8 +214,12 @@ class ArbitrageBot():
 
                         if percentage < self.min_percentage_to_trade():
                             # TODO: Delete this
-                            print('DEBUG: Continue because of percentage ({:.8f})'.format(
-                                                                                    percentage))
+                            logging.debug('Continue because of percentage'
+                                          ' ({:.4f}%) in markets {} -> {} -> {}'.format(
+                                                                            percentage,
+                                                                            coin_pair,
+                                                                            coin,
+                                                                            other_coin_pair))
                             continue
 
                         if ratio_reversed:
@@ -213,7 +236,7 @@ class ArbitrageBot():
                         if ((max_vol_to_buy * buy)
                                 < self.min_vol_to_trade(coin_pair)):
                             # TODO: Delete this
-                            print('DEBUG: Continue because of volume ({} {})'.format(
+                            logging.debug('Continue because of volume ({} {})'.format(
                                                                        max_vol_to_buy * buy,
                                                                        coin_pair))
                             continue
@@ -297,7 +320,7 @@ class ArbitrageBot():
         sym = self.get_symbols()
         self._process_symbols(sym)
         t = time.perf_counter() - tstart
-        print('Time downloading the symbols page: {:.2f}s'.format(t))
+        logging.info('Time downloading the symbols page: {:.2f}s'.format(t))
         coroutine = self._get_arbitrage_oportunities()
         # XXX: This is really needed?
         asyncio.set_event_loop(self.loop)
