@@ -2,3 +2,4 @@ requests
 aiohttp
 asyncio
 pyyaml
+python-telegram-bot

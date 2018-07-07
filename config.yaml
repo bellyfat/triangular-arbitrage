@@ -1,7 +1,9 @@
 telegram:
-    on: True
+    running: True
     api_key: FOO
+    chat_ids_file: chats.txt
 bot:
+    csv_file: results.csv
     # Minimum percentage of benefits, without substracting fees, in this case
     # 0.6%
     min_percentage: 1.006

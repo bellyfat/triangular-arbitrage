@@ -5,10 +5,11 @@ import json
 import time
 import yaml
 import logging
+import io
 
 logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(message)s',
                     datefmt='%d/%m/%Y %H:%M:%S',
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 
 # Get all the symbols, with information like buy and sell prices, fee,
 # volume...
@@ -27,14 +28,35 @@ TRADING_FEE = 0.001
 BUY_TEMPLATE = 'Buy  {} @ {} {} (vol: {} {})'
 SELL_TEMPLATE = 'Sell {} @ {} {} (vol: {} {})'
 
+def pprint_oporunities(ops):
+    ret = io.StringIO('')
+    for i in ops:
+        ratio_reversed = (i[2][0] == 'BUY')
+        cmp_val = i[1][2] * i[2][2] if not ratio_reversed \
+                                        else i[1][2] / i[2][2]
+        # Buy price
+        percentage = cmp_val / i[0][2]
+        ret.write('Oportunity: {} -> {} -> {} -> {} ({:.4f}%)\n'.format(
+            i[0][1], i[1][1], i[2][1], i[0][1], percentage
+            ))
+        for o in i:
+            if o[0] == 'BUY':
+                ret.write(BUY_TEMPLATE.format(*o[1:]) + '\n')
+            elif o[0] == 'SELL':
+                ret.write(SELL_TEMPLATE.format(*o[1:]) + '\n')
+            else:
+                raise ValueError()
+        ret.write('\n------------\n')
+    return ret.getvalue()
+
 
 class ArbitrageBot():
     def __init__(self, config_file='config.yaml'):
         self.loop = asyncio.new_event_loop()
         self._symbols = {}
 
-        with open(config_file, 'r') as f:
-            self.config = yaml.load(f)
+        self.config_file = config_file
+        self.load_config()
 
         ts = time.perf_counter()
         # Get the trade precision of all coins, sync http get may be slow but
@@ -55,6 +77,10 @@ class ArbitrageBot():
     def __del__(self):
         self.loop.close()
 
+    def load_config(self):
+        with open(self.config_file, 'r') as f:
+            self.config = yaml.load(f)
+
     def min_percentage_to_trade(self):
         return self.config['bot']['min_percentage']
 
@@ -67,6 +93,9 @@ class ArbitrageBot():
 
     def active_coins(self):
         return self.config['bot']['active_coins']
+
+    def get_csv_file(self):
+        return self.config['bot']['csv_file']
 
     async def _get_url_async(self, url, session):
         async with session.get(url, timeout=10) as response:
@@ -171,12 +200,12 @@ class ArbitrageBot():
                                               OPEN_ORDERS_URL.format(market3)
                                               ], session)
                         t = time.perf_counter() - ts
-                        logging.debug('Time downloading data async: {:.2f}s'.format(t))
+                        logging.info('Time downloading data async: {:.2f}s'.format(t))
 
                         for d in data:
                             if not d['success']:
                                 # TODO: Logging
-                                logging.debug('Continue because the data for the markets'
+                                logging.info('Continue because the data for the markets'
                                         ' {} -> {} -> {} can\'t returned an invalid'
                                         ' response'.format(coin_pair,
                                                            coin,
@@ -194,7 +223,7 @@ class ArbitrageBot():
                                                                 ratio_reversed)
                         # Check if arbitrage still exists
                         if not ok:
-                            logging.debug('Continue because arbitrage oportunity'
+                            logging.info('Continue because arbitrage oportunity'
                                           ' doesn\'t exist anymore for markets'
                                           ' {} -> {} -> {}'.format(coin_pair,
                                                                    coin,
@@ -214,7 +243,7 @@ class ArbitrageBot():
 
                         if percentage < self.min_percentage_to_trade():
                             # TODO: Delete this
-                            logging.debug('Continue because of percentage'
+                            logging.info('Continue because of percentage'
                                           ' ({:.4f}%) in markets {} -> {} -> {}'.format(
                                                                             percentage,
                                                                             coin_pair,
@@ -236,43 +265,59 @@ class ArbitrageBot():
                         if ((max_vol_to_buy * buy)
                                 < self.min_vol_to_trade(coin_pair)):
                             # TODO: Delete this
-                            logging.debug('Continue because of volume ({} {})'.format(
-                                                                       max_vol_to_buy * buy,
-                                                                       coin_pair))
+                            logging.info('Continue because of volume ({} {})'.format(
+                                                                   max_vol_to_buy * buy,
+                                                                   coin_pair))
                             continue
 
-                        print('Arbitrage: %s -> %s -> %s -> %s' % (coin_pair,
+                        # Max volume will be saved in coin_pair units
+                        self.save_to_csv(coin_pair, coin, other_coin_pair,
+                                         percentage, max_vol_to_buy * buy)
+
+                        logging.info('Arbitrage: %s -> %s -> %s -> %s' % (coin_pair,
                                                                coin,
                                                                other_coin_pair,
                                                                coin_pair))
-                        print('Max vol %s %s' % (max_vol_to_buy, coin))
-                        print('Arbitrage oportunity! {:.4f}%'.format(
+                        logging.info('Max vol %s %s' % (max_vol_to_buy, coin))
+                        logging.info('Arbitrage oportunity! {:.4f}%'.format(
                                                                 percentage))
-                        print(BUY_TEMPLATE.format(coin,
+                        logging.info(BUY_TEMPLATE.format(coin,
                                                   buy,
                                                   coin_pair,
                                                   market1_volume,
                                                   coin
                                                   ))
-                        print(SELL_TEMPLATE.format(coin,
+                        logging.info(SELL_TEMPLATE.format(coin,
                                                    sell_other,
                                                    other_coin_pair,
                                                    market2_volume,
                                                    coin))
+                        arbitrage_oportunities.append([
+                            ['BUY', coin, buy, coin_pair, market1_volume, coin],
+                            ['SELL', coin, sell_other, other_coin_pair, market2_volume, coin]
+                            ])
                         if ratio_reversed:
-                            print(BUY_TEMPLATE.format(coin_pair,
+                            logging.info(BUY_TEMPLATE.format(coin_pair,
                                                       ratio[0],
                                                       other_coin_pair,
                                                       market3_volume,
                                                       coin_pair))
+                            arbitrage_oportunities[-1].append(
+                                ['BUY', coin_pair, ratio[0], other_coin_pair,
+                                 market3_volume, coin_pair]
+                                )
                         else:
-                            print(SELL_TEMPLATE.format(other_coin_pair,
+                            logging.info(SELL_TEMPLATE.format(other_coin_pair,
                                                        ratio[1],
                                                        coin_pair,
                                                        market3_volume,
                                                        other_coin_pair))
+                            arbitrage_oportunities[-1].append(
+                                ['SELL', other_coin_pair, ratio[1], coin_pair,
+                                 market3_volume, other_coin_pair]
+                                )
 
-                        print('----------------------------')
+                        logging.info('----------------------------')
 
         await session.close()
         return arbitrage_oportunities
@@ -315,7 +360,12 @@ class ArbitrageBot():
             raise IOError('Find a better exception to raise')
         return ret['data']
 
+    def save_to_csv(self, *args):
+        with open(self.get_csv_file(), 'a+') as f:
+            f.write(','.join(map(str, args)) + '\n')
+
     def run(self):
+        self.load_config()
         tstart = time.perf_counter()
         sym = self.get_symbols()
         self._process_symbols(sym)
