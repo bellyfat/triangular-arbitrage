@@ -264,15 +264,15 @@ class ArbitrageBot():
                         # if it's an acceptable value (check the config file)
                         if ((max_vol_to_buy * buy)
                                 < self.min_vol_to_trade(coin_pair)):
-                            # TODO: Delete this
                             logging.info('Continue because of volume ({} {})'.format(
                                                                    max_vol_to_buy * buy,
                                                                    coin_pair))
                             continue
 
                         # Max volume will be saved in coin_pair units
-                        self.save_to_csv(coin_pair, coin, other_coin_pair,
-                                         percentage, max_vol_to_buy * buy)
+                        self.save_to_csv(time.time(), coin_pair, coin,
+                                         other_coin_pair, percentage,
+                                         max_vol_to_buy * buy)
 
                         logging.info('Arbitrage: %s -> %s -> %s -> %s' % (coin_pair,
                                                                coin,
