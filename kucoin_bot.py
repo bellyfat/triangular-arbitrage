@@ -13,14 +13,14 @@ logging.basicConfig(format='[%(levelname)s] [%(asctime)s] %(message)s',
 
 # Get all the symbols, with information like buy and sell prices, fee,
 # volume...
-SYMBOLS_URL = 'https://kitchen-3.kucoin.com/v1/market/open/symbols'
+SYMBOLS_URL = 'https://kitchen.kucoin.com/v1/market/open/symbols'
 
 # For trade precision
-COINS_INFO_URL = 'https://kitchen-3.kucoin.com/v1/market/open/coins'
+COINS_INFO_URL = 'https://kitchen.kucoin.com/v1/market/open/coins'
 
 # Get open buy and sell orders in a specific market.
 # If the market is NEO-ETH it means: Buy/sell NEO for ETH
-OPEN_ORDERS_URL = 'https://kitchen-3.kucoin.com/v1/{}/open/orders?limit=1'
+OPEN_ORDERS_URL = 'https://kitchen.kucoin.com/v1/{}/open/orders?limit=1'
 
 # 0.1% per operation
 TRADING_FEE = 0.001
